@@ -159,3 +159,48 @@ JOIN teams AS o ON r.opponent_id = o.team_id
 WHERE t.team_name = 'Real Madrid'
 ORDER BY r.match_date DESC
 LIMIT 5;
+
+
+-- 3. Bookmaker benchmark per La Liga season (Bet365):
+-- The average margin, how often the favorite team won, and the average implied probability of a home win and a draw next to how often they actually happened.
+-- 1 / odds gives the implied chance of each result, and dividing by their sum removes the margin.
+SELECT
+    s.season_label,
+    COUNT(*) AS n_matches,
+    ROUND(100 * AVG(b.margin), 1) AS avg_margin_pct,
+    ROUND(100.0 * COUNT(*) FILTER (WHERE b.favorite = b.ft_result) / COUNT(*), 1) AS favorite_won_pct,
+    ROUND(100 * AVG(b.home_prob), 1) AS avg_home_prob_pct,
+    ROUND(100.0 * COUNT(*) FILTER (WHERE b.ft_result = 'H') / COUNT(*), 1) AS actual_home_win_pct,
+    ROUND(100 * AVG(b.draw_prob), 1) AS avg_draw_prob_pct,
+    ROUND(100.0 * COUNT(*) FILTER (WHERE b.ft_result = 'D') / COUNT(*), 1) AS actual_draw_pct
+FROM (
+    -- The margin, and the probabilities with the margin removed.
+    SELECT
+        i.season_start,
+        i.ft_result,
+        i.favorite,
+        i.implied_total - 1 AS margin,
+        i.implied_home / i.implied_total AS home_prob,
+        i.implied_draw / i.implied_total AS draw_prob
+    FROM (
+        -- Implied chances straight from the odds (they sum to more than 1, so the excess is the margin) and the favorite (the team with the lower odds).
+        SELECT
+            m.season_start,
+            m.ft_result,
+            1 / o.b365_home AS implied_home,
+            1 / o.b365_draw AS implied_draw,
+            1 / o.b365_home + 1 / o.b365_draw + 1 / o.b365_away AS implied_total,
+            -- Ties go to the away team, then the draw
+            CASE
+                WHEN o.b365_away <= o.b365_draw AND o.b365_away <= o.b365_home THEN 'A'
+                WHEN o.b365_draw <= o.b365_home THEN 'D'
+                ELSE 'H'
+            END AS favorite
+        FROM matches AS m
+        JOIN match_odds AS o ON m.match_id = o.match_id
+        WHERE m.division_code = 'SP1' AND o.b365_home IS NOT NULL
+    ) AS i
+) AS b
+JOIN seasons AS s ON b.season_start = s.season_start
+GROUP BY s.season_start, s.season_label
+ORDER BY s.season_start;
