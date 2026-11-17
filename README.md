@@ -145,13 +145,19 @@ Microsoft 365 Excel, so re-running the notebook never overwrites it.
 ## Project structure
 
 ```
-laliga-match-prediction/
+football-score-predictor/
 ├── environment.yml            # Conda environment with pinned versions
 ├── data/
 │   ├── raw/                   # Matches.csv and EloRatings.csv (not in the repo, see below)
 │   └── processed/             # Cleaned La Liga and Segunda matches
 ├── notebooks/
+│   ├── database_load.ipynb             # Loads the cleaned data into PostgreSQL
 │   └── laliga_match_prediction.ipynb   # The main notebook
+├── sql/
+│   ├── 01_create_database.sql         # Owner role and database
+│   ├── 02_create_tables.sql           # Tables, keys and constraints
+│   ├── 03_analysis_queries.sql        # League table, rolling shots on target, bookmakers
+│   └── 04_roles_and_privileges.sql    # Read only analyst and pipeline roles
 ├── src/
 │   ├── cleaning.py            # Profiling helpers, season columns, league tables
 │   ├── team_names.py          # Team name fixes
@@ -159,7 +165,7 @@ laliga-match-prediction/
 │   ├── features.py            # Rolling features without leakage
 │   ├── models.py              # Logistic and Poisson models, score tables, bookmaker probabilities
 │   └── evaluation.py          # Scoring and forward chaining validation
-├── outputs/
+└── outputs/
     ├── figures/               # Charts saved by the notebook
     ├── laliga_data.xlsx       # Data exported by the notebook
     └── laliga_analysis.xlsx   # Hand built Excel analysis
@@ -171,8 +177,8 @@ laliga-match-prediction/
 
 1. **Clone the repo:**
     ```bash
-    git clone https://github.com/idoberk/laliga-match-prediction.git
-    cd laliga-match-prediction
+    git clone https://github.com/idoberk/football-score-predictor.git
+    cd football-score-predictor
     ```
 2. **Create the environment** (needs [Miniconda](https://docs.conda.io/en/latest/miniconda.html)
    or Anaconda):
@@ -185,6 +191,31 @@ laliga-match-prediction/
    them in `data/raw/`. The raw files are about 57 MB, so they are not stored in this repo.
 4. **Run the notebook:** Open `notebooks/laliga_match_prediction.ipynb` in VS Code or Jupyter,
    select the `laliga-prediction` kernel, and run all cells.
+5. **Set up the database (optional, for the PostgreSQL part):** Needs a local PostgreSQL
+   server (built and tested with PostgreSQL 18). From the repo root:
+    ```bash
+    # As the postgres superuser: The project's owner role and database
+    psql -U postgres -d postgres -f sql/01_create_database.sql
+    ```
+   Set the owner's password: Open `psql -U postgres -d postgres` and run
+   `\password football_admin`. Then:
+    ```bash
+    # As the owner: Tables, keys and constraints
+    psql -U football_admin -d football_predictor -f sql/02_create_tables.sql
+    # As the superuser: Read only and pipeline roles (ends with a privilege check)
+    psql -U postgres -d football_predictor -f sql/04_roles_and_privileges.sql
+    ```
+   Set passwords for `analyst_user` and `pipeline_app` the same way with `\password`.
+   Create a `.env` file in the repo root (it is git ignored, never commit it):
+    ```
+    PGHOST=localhost
+    PGPORT=5432
+    PGDATABASE=football_predictor
+    PGUSER=football_admin
+    PGPASSWORD=your_password
+    ```
+   Run `notebooks/database_load.ipynb` to load the data. It empties and reloads the tables, so
+   it can be run again at any time. Example queries are in `sql/03_analysis_queries.sql`.
 
 The analysis workbook needs Microsoft 365 or Excel 2021 or later (for `XLOOKUP`, `FILTER`,
 `UNIQUE` and the other dynamic array functions).
