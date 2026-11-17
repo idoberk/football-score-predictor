@@ -14,3 +14,26 @@ ELO_NAME_FIXES: dict[str, str] = {
     "Andorra CF": "Andorra",
     "Leonesa": "Cultural Leonesa",
 }
+
+FOOTBALL_DATA_TEAM_IDS: dict[int, str] = {
+    263: "Alaves",
+    77: "Ath Bilbao",
+    78: "Ath Madrid",
+    81: "Barcelona",
+    90: "Betis",
+    558: "Celta",
+    285: "Elche",
+    80: "Espanol",
+    82: "Getafe",
+    560: "La Coruna",
+    88: "Levante",
+    84: "Malaga",
+    79: "Osasuna",
+    86: "Real Madrid",
+    5335: "Santander",
+    559: "Sevilla",
+    92: "Sociedad",
+    95: "Valencia",
+    87: "Vallecano",
+    94: "Villarreal",
+}
