@@ -38,3 +38,30 @@ LEFT JOIN matches AS m
 WHERE f.status = 'FINISHED'
 GROUP BY comparison
 ORDER BY first_match;
+
+
+-- 3. Half-time state vs full-time result.
+-- '->' returns a JSON object and goes one level deeper, and '->>' returns the value as text.
+WITH half_times AS (
+    SELECT
+        f.ft_result,
+        (f.raw -> 'score' -> 'halfTime' ->> 'home')::SMALLINT AS ht_home_goals,
+        (f.raw -> 'score' -> 'halfTime' ->> 'away')::SMALLINT AS ht_away_goals
+    FROM fixtures AS f
+    WHERE f.status = 'FINISHED'
+)
+
+SELECT
+    CASE
+        WHEN ht_home_goals > ht_away_goals THEN 'Home team leads'
+        WHEN ht_home_goals = ht_away_goals THEN 'Level'
+        ELSE 'Away team leads'
+    END AS at_half_time,
+    COUNT(*) AS matches,
+    COUNT(*) FILTER (WHERE ft_result = 'H') AS home_wins,
+    COUNT(*) FILTER (WHERE ft_result = 'D') AS draws,
+    COUNT(*) FILTER (WHERE ft_result = 'A') AS away_wins
+FROM half_times
+GROUP BY at_half_time
+ORDER BY matches DESC;
+
