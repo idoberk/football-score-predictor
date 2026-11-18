@@ -64,4 +64,3 @@ SELECT
 FROM half_times
 GROUP BY at_half_time
 ORDER BY matches DESC;
-
