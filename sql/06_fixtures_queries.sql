@@ -18,3 +18,23 @@ WHERE f.status IN ('SCHEDULED', 'TIMED') AND f.kickoff_at > now()
 ORDER BY f.kickoff_at, home.team_name
 LIMIT 10;
 
+
+-- 2. The API's finished matches compared with the matches table (the dataset).
+SELECT
+    CASE
+        WHEN m.match_id IS NULL THEN 'Missing from matches'
+        WHEN m.ft_home_goals = f.ft_home_goals AND m.ft_away_goals = f.ft_away_goals THEN 'Same score'
+        ELSE 'Different score'
+    END AS comparison,
+    COUNT(*) AS finished_fixtures,
+    MIN(f.kickoff_at AT TIME ZONE 'Europe/Madrid')::DATE AS first_match,
+    MAX(f.kickoff_at AT TIME ZONE 'Europe/Madrid')::DATE AS last_match
+FROM fixtures AS f
+LEFT JOIN matches AS m
+    ON m.season_start = f.season_start
+    AND m.division_code = f.division_code
+    AND m.home_team_id = f.home_team_id
+    AND m.away_team_id = f.away_team_id
+WHERE f.status = 'FINISHED'
+GROUP BY comparison
+ORDER BY first_match;
