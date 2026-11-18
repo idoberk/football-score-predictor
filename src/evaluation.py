@@ -96,3 +96,28 @@ def goal_count_table(goals: pd.Series, rates: np.ndarray, top_bin: int) -> pd.Da
         {"observed": observed, "expected": probabilities.sum(axis=0)},
         index=pd.Index(labels, name="goals"),
     )
+
+
+def per_match_log_loss(results: pd.Series, probabilities: pd.DataFrame) -> pd.Series:
+    """
+    Compute the log loss of every single match: -ln(probability given to the
+    result that actually happened).
+
+    Args:
+        results (pd.Series): Actual results ("H" / "D" / "A").
+        probabilities (pd.DataFrame): One column per result with its predicted
+            probability, one row per match (same order as results).
+
+    Returns:
+        pd.Series: The log loss of each match, with the index of results. Its mean
+            is the usual log loss.
+    """
+    # For each match, the position of the column of the actual result (H = 0, ...)
+    column_positions = probabilities.columns.get_indexer(results)
+
+    # Pick one probability per row: row m, column of match m's actual result
+    actual_probabilities = probabilities.to_numpy()[
+        np.arange(len(results)), column_positions
+    ]
+
+    return pd.Series(-np.log(actual_probabilities), index=results.index)
