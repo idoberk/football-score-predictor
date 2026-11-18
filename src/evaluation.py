@@ -1,7 +1,8 @@
+import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, brier_score_loss, log_loss
 
-from src.models import make_outcome_model, predict_outcomes
+from src.models import make_outcome_model, poisson_probabilities, predict_outcomes
 
 
 def score_probabilities(
@@ -61,3 +62,62 @@ def forward_chaining_log_loss(
         log_losses[season] = scores["log_loss"]
 
     return pd.Series(log_losses, name="log_loss")
+
+
+def goal_count_table(goals: pd.Series, rates: np.ndarray, top_bin: int) -> pd.DataFrame:
+    """
+    Compare how often each number of goals happened with how often a Poisson distribution expects it.
+
+    Args:
+        goals (pd.Series): Goals scored by one team, one value per match.
+        rates (np.ndarray): Expected goals for that team, one value per match (the
+            same value for every match when testing one league wide average).
+        top_bin (int): Goal counts from this value up are grouped into one bin
+            (for example, 5 means 0, 1, 2, 3, 4, and 5+), so no bin is too small.
+
+    Returns:
+        pd.DataFrame: One row per bin with the observed number of matches and the
+            expected number under the Poisson distribution.
+    """
+    # Chance of exactly 0 to top_bin - 1 goals in each match
+    probabilities = poisson_probabilities(rates, top_bin - 1)
+
+    # The last bin gets all the remaining probability, so each row sums to 1
+    top_bin_probabilities = 1 - probabilities.sum(axis=1, keepdims=True)
+    probabilities = np.hstack([probabilities, top_bin_probabilities])
+
+    # Count the matches per bin. clip puts 5, 6, 7, ... goals into the 5+ bin
+    observed = np.bincount(goals.clip(upper=top_bin), minlength=top_bin + 1)
+
+    labels = [str(k) for k in range(top_bin)] + [f"{top_bin}+"]
+
+    # Expected matches per bin = the sum of every match's probability for that bin
+    return pd.DataFrame(
+        {"observed": observed, "expected": probabilities.sum(axis=0)},
+        index=pd.Index(labels, name="goals"),
+    )
+
+
+def per_match_log_loss(results: pd.Series, probabilities: pd.DataFrame) -> pd.Series:
+    """
+    Compute the log loss of every single match: -ln(probability given to the
+    result that actually happened).
+
+    Args:
+        results (pd.Series): Actual results ("H" / "D" / "A").
+        probabilities (pd.DataFrame): One column per result with its predicted
+            probability, one row per match (same order as results).
+
+    Returns:
+        pd.Series: The log loss of each match, with the index of results. Its mean
+            is the usual log loss.
+    """
+    # For each match, the position of the column of the actual result (H = 0, ...)
+    column_positions = probabilities.columns.get_indexer(results)
+
+    # Pick one probability per row: row m, column of match m's actual result
+    actual_probabilities = probabilities.to_numpy()[
+        np.arange(len(results)), column_positions
+    ]
+
+    return pd.Series(-np.log(actual_probabilities), index=results.index)

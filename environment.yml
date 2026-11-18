@@ -12,6 +12,7 @@ dependencies:
   # Modeling
   - scikit-learn=1.9.1
   - statsmodels=0.15.0
+  - scipy=1.18.1  # Hypothesis tests (scipy.stats)
   # Excel export
   - openpyxl=3.1.5
   # Notebook tooling and formatting
