@@ -46,6 +46,19 @@ ratings.
   leakage.
 - Team names are made consistent across seasons (for example `Leonesa` → `Cultural Leonesa`).
 
+**Fixtures and current results:** The [football-data.org](https://www.football-data.org) API (free
+tier) gives the full 2026/27 La Liga schedule with kickoff times, and the results of the matches
+played so far. One request returns the whole season (380 matches). The raw JSON is saved locally
+and the matches are stored in the `fixtures` table in PostgreSQL.
+
+- API teams are matched to the dataset's teams by the API's numeric team id, not by name (only 9
+  of the 20 short names are the same). All 31 matches that are in both sources agree on the date
+  and the score.
+- The API sends a 0-0 score for a cancelled match. It's a placeholder, so goals are stored only
+  for finished matches.
+- The dataset ends on 3 September 2026. The API has 88 more finished La Liga matches after that
+  date (results only, no match stats or Elo).
+
 ---
 
 ## Approach
@@ -148,16 +161,19 @@ Microsoft 365 Excel, so re-running the notebook never overwrites it.
 football-score-predictor/
 ├── environment.yml            # Conda environment with pinned versions
 ├── data/
-│   ├── raw/                   # Matches.csv and EloRatings.csv (not in the repo, see below)
+│   ├── raw/                   # Matches.csv, EloRatings.csv and the API's JSON (not in the repo)
 │   └── processed/             # Cleaned La Liga and Segunda matches
 ├── notebooks/
 │   ├── database_load.ipynb             # Loads the cleaned data into PostgreSQL
+│   ├── fixtures_api.ipynb              # Fetches fixtures from the API and upserts them
 │   └── laliga_match_prediction.ipynb   # The main notebook
 ├── sql/
 │   ├── 01_create_database.sql         # Owner role and database
 │   ├── 02_create_tables.sql           # Tables, keys and constraints
 │   ├── 03_analysis_queries.sql        # League table, rolling shots on target, bookmakers
-│   └── 04_roles_and_privileges.sql    # Read only analyst and pipeline roles
+│   ├── 04_roles_and_privileges.sql    # Read only analyst and pipeline roles
+│   ├── 05_create_fixtures.sql         # Fixtures table for the API matches
+│   └── 06_fixtures_queries.sql        # Next fixtures, API vs dataset, half time from JSONB
 ├── src/
 │   ├── cleaning.py            # Profiling helpers, season columns, league tables
 │   ├── team_names.py          # Team name fixes
@@ -205,7 +221,12 @@ football-score-predictor/
     # As the superuser: Read only and pipeline roles (ends with a privilege check)
     psql -U postgres -d football_predictor -f sql/04_roles_and_privileges.sql
     ```
-   Set passwords for `analyst_user` and `pipeline_app` the same way with `\password`.
+   Set passwords for `analyst_user` and `pipeline_app` the same way with `\password`. Then
+   create the fixtures table (after `04`, so the analyst role can read it automatically):
+    ```bash
+    # As the owner: Fixtures table, writable by the pipeline role
+    psql -U football_admin -d football_predictor -f sql/05_create_fixtures.sql
+    ```
    Create a `.env` file in the repo root (it is git ignored, never commit it):
     ```
     PGHOST=localhost
@@ -213,9 +234,18 @@ football-score-predictor/
     PGDATABASE=football_predictor
     PGUSER=football_admin
     PGPASSWORD=your_password
+    PIPELINE_PGUSER=pipeline_app
+    PIPELINE_PGPASSWORD=pipeline_app_password
+    FOOTBALL_DATA_API=your_api_key
     ```
    Run `notebooks/database_load.ipynb` to load the data. It empties and reloads the tables, so
    it can be run again at any time. Example queries are in `sql/03_analysis_queries.sql`.
+6. **Fetch the fixtures (optional, needs step 5):** Register for a free API key at
+   [football-data.org](https://www.football-data.org/client/register) and put it in `.env` as
+   `FOOTBALL_DATA_API`. Then run `notebooks/fixtures_api.ipynb`. It makes one API request,
+   saves the JSON in `data/raw/football_data/` and upserts the matches into `fixtures` as
+   `pipeline_app`, so it can be run again at any time to get new results and kickoff times.
+   Example queries are in `sql/06_fixtures_queries.sql`.
 
 The analysis workbook needs Microsoft 365 or Excel 2021 or later (for `XLOOKUP`, `FILTER`,
 `UNIQUE` and the other dynamic array functions).
@@ -241,3 +271,5 @@ The analysis workbook needs Microsoft 365 or Excel 2021 or later (for `XLOOKUP`,
 
 - Data: [xgabora/Club-Football-Match-Data](https://github.com/xgabora/Club-Football-Match-Data)
   (MIT license), which also includes Elo ratings based on [ClubElo](http://clubelo.com).
+- Fixtures and current results: Football data provided by the
+  [Football-Data.org](https://www.football-data.org) API.
